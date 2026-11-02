@@ -1,0 +1,23 @@
+ID Colis Support App - Pre-Installation Information
+
+Before you begin the installation, please note:
+
+SYSTEM REQUIREMENTS:
+- Windows 10 or later (64-bit)
+- 500 MB of free disk space
+- Ports 8000 and 8501 must be available
+
+WHAT WILL BE INSTALLED:
+- ID Colis Support App application
+- Required Python runtime and dependencies
+- Start Menu shortcuts
+- Optional Desktop shortcut
+
+AFTER INSTALLATION:
+- The application will launch automatically
+- A Start Menu shortcut will be created
+- An uninstaller will be available in Control Panel
+
+If you have any issues, visit: https://example.com/support
+
+

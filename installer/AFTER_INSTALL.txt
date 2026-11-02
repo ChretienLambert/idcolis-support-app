@@ -1,0 +1,19 @@
+ID Colis Support App - Post-Installation Information
+
+Installation Complete!
+
+GETTING STARTED:
+1. The application has been installed to: %ProgramFiles%\ID Colis Support App
+2. A shortcut has been added to your Start Menu
+3. You can launch the application anytime from the Start Menu
+
+ACCESSING THE APPLICATION:
+- Backend API: http://127.0.0.1:8000
+- Frontend: http://localhost:8501
+
+SUPPORT:
+For help or to report issues, visit: https://example.com/support
+
+Thank you for installing ID Colis Support App!
+
+
