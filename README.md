@@ -106,6 +106,3 @@ The built wheel will appear in the `dist/` folder.
 ## Git and release hygiene
 
 The repository must not include `.env`, local databases, logs, uploaded evidence, virtual environments, generated build output, or installer artifacts. Before committing, run `python -m compileall -q backend frontend scripts`, `python scripts/test_agency_workflows.py`, and inspect `git status --short`.
-
-The SOCADEL project is a separate technical reference and is not part of this repository.
-
