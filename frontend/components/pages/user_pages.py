@@ -14,13 +14,12 @@ def render_user_home() -> None:
     tickets = _load_tickets()
     mine = [ticket for ticket in tickets if ticket["requester_user_id"] == _current_user_id()]
     categories = ["Toutes"] + sorted({ticket["category"] for ticket in mine})
-    category_icons = {"Toutes": "▦", "Fleet / Driver App": "🚚", "Scanning / Hardware": "▣", "Waybill / Manifest Sync": "↔", "Account / Authentication": "♙", "Network / Connectivity": "⌁", "ID Colis Application": "◈", "Autres": "•"}
     current_category = st.session_state.get("user_home_category_filter", "Toutes")
     st.markdown("<div class='idc-eyebrow'>Filtrer mes tickets</div>", unsafe_allow_html=True)
     category_cols = st.columns(min(4, len(categories)))
     for index, category in enumerate(categories):
         with category_cols[index % len(category_cols)]:
-            if st.button(f"{category_icons.get(category, '•')}  {category}", key=f"home_category_{index}", width="stretch", type="primary" if current_category == category else "secondary"):
+            if st.button(category, key=f"home_category_{index}", width="stretch", type="primary" if current_category == category else "secondary"):
                 st.session_state.user_home_category_filter = category
                 st.rerun()
     category_filter = st.session_state.get("user_home_category_filter", "Toutes")
@@ -81,7 +80,34 @@ def render_ticket_create() -> None:
         description = st.text_area("Description détaillée", key="create_description", height=180, max_chars=2000)
         char_count = len(description)
         st.caption(f"Caractères: {char_count}/2000")
-        
+        if description.strip() and len(description.strip()) < 25:
+            st.info("Description un peu courte : précisez par exemple l'appareil concerné, depuis quand, et ce qui s'affiche à l'écran. Cela aide l'équipe à traiter votre ticket plus vite.")
+
+        if subject.strip() and description.strip() and st.button("Vérifier une solution rapide", width="stretch"):
+            try:
+                result = _backend().self_help(st.session_state.auth_session["access_token"], subject, description)
+            except APIError:
+                result = {"matched": False}
+            st.session_state.self_help_result = result
+
+        self_help_result = st.session_state.get("self_help_result")
+        if self_help_result and self_help_result.get("matched"):
+            with st.container(border=True):
+                st.markdown(f'<div class="idc-card-title">{self_help_result["title"]}</div>', unsafe_allow_html=True)
+                st.caption("Essayez ces étapes avant de créer un ticket — cela résout souvent le problème en quelques minutes.")
+                for index, step in enumerate(self_help_result["steps"], start=1):
+                    st.markdown(f"**{index}.** {step}")
+                help_col1, help_col2 = st.columns(2)
+                with help_col1:
+                    if st.button("C'est résolu, merci", type="primary", width="stretch"):
+                        st.session_state.pop("self_help_result", None)
+                        set_navigation("user_home", None)
+                        st.rerun()
+                with help_col2:
+                    if st.button("Toujours un problème, créer le ticket", width="stretch"):
+                        st.session_state.pop("self_help_result", None)
+                        st.rerun()
+
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Annuler", width="stretch"):
@@ -102,6 +128,7 @@ def render_ticket_create() -> None:
                     )
                     st.session_state.flash_message = "Ticket créé avec succès. Statut: En attente."
                     st.session_state.selected_ticket_id = ticket["id"]
+                    st.session_state.pop("self_help_result", None)
                     set_navigation("ticket_detail", ticket["id"])
                     st.rerun()
                 except APIError as exc:

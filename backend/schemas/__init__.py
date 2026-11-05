@@ -194,9 +194,13 @@ class InterventionCreate(BaseModel):
     agency: str | None = None
     site: str | None = None
     city: str | None = None
+    started_at: datetime | None = None
     contact_name: str | None = None
     diagnosis: str | None = None
-    actions_performed: str | None = None
+    # What the technician actually did is the one part of the report that
+    # can't be skipped: the diagnosis or client details may be thin or
+    # revised later, but there must always be a record of the work performed.
+    actions_performed: str = Field(min_length=3)
     equipment_involved: str | None = None
     materials_used: str | None = None
     tests_performed: str | None = None
@@ -261,5 +265,57 @@ class AuditLogSchema(BaseModel):
 class HealthSchema(BaseModel):
     ok: bool
     env: str
+
+
+class SimilarTicketSchema(BaseModel):
+    id: str
+    subject: str
+    status: str
+    category: str
+    similarity: float
+    created_at: datetime
+
+
+class SimilarTicketsResponse(BaseModel):
+    possible_duplicates: list[SimilarTicketSchema]
+    similar_resolved: list[SimilarTicketSchema]
+
+
+class AIPerformanceSchema(BaseModel):
+    total_decisions: int
+    accepted: int
+    corrected: int
+    acceptance_rate: float
+    recent_corrections: list[dict[str, Any]]
+
+
+class RecurringIssueSchema(BaseModel):
+    agency: str | None
+    site: str | None
+    category: str
+    count: int
+    latest_ticket_id: str
+    latest_created_at: datetime
+
+
+class ConnectivityRiskSchema(BaseModel):
+    ticket_id: str
+    subject: str
+    agency: str | None
+    site: str | None
+    status: str
+    hours_open: float
+    created_at: datetime
+
+
+class SelfHelpRequest(BaseModel):
+    subject: str = ""
+    description: str = ""
+
+
+class SelfHelpResponseSchema(BaseModel):
+    matched: bool
+    title: str | None = None
+    steps: list[str] = []
 
 

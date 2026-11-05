@@ -10,6 +10,10 @@ from ..dependencies import get_ticket_service
 from ..models import AuditLog
 from ..schemas import (
     AuditLogSchema,
+    ConnectivityRiskSchema,
+    RecurringIssueSchema,
+    SimilarTicketSchema,
+    SimilarTicketsResponse,
     TicketAssignmentCreate,
     TicketCommentCreate,
     TicketCreateRequest,
@@ -33,6 +37,33 @@ def list_tickets(
 ):
     tickets = ticket_service.list_tickets(user, priority=priority, status=status_filter, agency=agency)
     return [ticket_summary(ticket) for ticket in tickets]
+
+
+@router.get("/recurring-issues", response_model=list[RecurringIssueSchema])
+def recurring_issues(
+    agency: str | None = None,
+    days: int = 30,
+    min_count: int = 3,
+    ticket_service: TicketService = Depends(get_ticket_service),
+    user=Depends(get_current_user),
+):
+    if user.role.name not in {"Support_IT", "Régulateur_Agence"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only support agents can view recurring issues.")
+    scope = agency or getattr(user, "_agency_scope", None)
+    return ticket_service.recurring_issues(agency=scope, days=days, min_count=min_count)
+
+
+@router.get("/connectivity-risk", response_model=list[ConnectivityRiskSchema])
+def connectivity_risk(
+    agency: str | None = None,
+    hours: int = 24,
+    ticket_service: TicketService = Depends(get_ticket_service),
+    user=Depends(get_current_user),
+):
+    if user.role.name not in {"Support_IT", "Régulateur_Agence"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only support agents can view connectivity risk.")
+    scope = agency or getattr(user, "_agency_scope", None)
+    return ticket_service.connectivity_risk_tickets(agency=scope, hours=hours)
 
 
 @router.get("/{ticket_id}", response_model=TicketDetailSchema)
@@ -136,6 +167,29 @@ def assign_ticket(ticket_id: str, payload: TicketAssignmentCreate, ticket_servic
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/{ticket_id}/similar", response_model=SimilarTicketsResponse)
+def similar_tickets(ticket_id: str, ticket_service: TicketService = Depends(get_ticket_service), user=Depends(get_current_user)):
+    if user.role.name != "Support_IT":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only support agents can view similar tickets.")
+    try:
+        ticket = ticket_service.get_ticket(ticket_id, user=user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    duplicates, resolved = ticket_service.find_similar_tickets(ticket)
+    return SimilarTicketsResponse(
+        possible_duplicates=[
+            SimilarTicketSchema(id=t.id, subject=t.subject, status=t.status, category=t.category, similarity=score, created_at=t.created_at)
+            for t, score in duplicates
+        ],
+        similar_resolved=[
+            SimilarTicketSchema(id=t.id, subject=t.subject, status=t.status, category=t.category, similarity=score, created_at=t.created_at)
+            for t, score in resolved
+        ],
+    )
 
 
 @router.get("/{ticket_id}/audit", response_model=list[AuditLogSchema])

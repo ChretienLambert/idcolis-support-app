@@ -9,7 +9,7 @@ from services.api import APIError
 from services.session import set_navigation
 from views.layout import status_badge
 
-from components.common import UI_LOGGER, _backend, _load_teams, _role_label
+from components.common import UI_LOGGER, _backend, _group_identical_reports, _load_teams, _role_label
 
 def _render_ticket_activity(ticket: dict) -> None:
     st.markdown('<div class="panel"><div class="section-title">Activité et échanges</div>', unsafe_allow_html=True)
@@ -22,6 +22,126 @@ def _render_ticket_activity(ticket: dict) -> None:
     if not ticket['comments']:
         st.caption("Aucune activité pour le moment.")
     st.markdown('</div>', unsafe_allow_html=True)
+
+
+@st.dialog("Validation de la suggestion IA", width="large")
+def _render_ai_validation_dialog(ticket: dict, ticket_id: str) -> None:
+    """Block the rest of the ticket page until the agent accepts or rejects
+    the AI's classification. The decision (as-is or corrected) is fed back
+    to the model, so skipping it silently would starve its retraining data."""
+    st.caption("Vérifiez la suggestion générée par le modèle avant de continuer. Votre décision permet aussi de réentraîner l’IA.")
+    try:
+        prediction = _backend().classify(
+            st.session_state.auth_session["access_token"],
+            ticket["subject"],
+            ticket["description"],
+            ticket.get("agency"),
+        )
+    except APIError:
+        st.warning("Impossible d'obtenir les suggestions IA.")
+        if st.button("Fermer", width="stretch"):
+            st.session_state[f"ai_dismissed_{ticket_id}"] = True
+            st.rerun()
+        return
+
+    if prediction["confidence"] < 0.6:
+        st.warning(f"Confiance faible ({prediction['confidence']:.0%}) — vérifiez attentivement avant de valider.")
+
+    st.markdown(
+        f"""
+        <div class="ai-suggestion-box">
+          <div class="ai-suggestion-title">Analyse ID Colis</div>
+          <div class="ai-suggestion-item">
+            <div class="ai-suggestion-label">Catégorie logistique:</div>
+            <div class="ai-suggestion-value">{prediction['category']}</div>
+          </div>
+          <div class="ai-suggestion-item">
+            <div class="ai-suggestion-label">Priorité opérationnelle:</div>
+            <div class="ai-suggestion-value">{prediction['priority']}</div>
+          </div>
+          <div class="ai-suggestion-item">
+            <div class="ai-suggestion-label">Équipe de routage:</div>
+            <div class="ai-suggestion-value">{prediction['team_name']}</div>
+          </div>
+          <div class="ai-suggestion-item">
+            <div class="ai-suggestion-label">Intervention terrain:</div>
+            <div class="ai-suggestion-value">À confirmer par l’agent selon l’impact et le matériel concerné</div>
+          </div>
+          <div class="ai-suggestion-item">
+            <div class="ai-suggestion-label">Fiabilité et justification:</div>
+            <div class="ai-suggestion-value">{prediction['confidence']:.0%} · {prediction.get('notes', 'Analyse automatique')}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    try:
+        similar = _backend().similar_tickets(st.session_state.auth_session["access_token"], ticket_id)
+    except APIError:
+        similar = {"possible_duplicates": [], "similar_resolved": []}
+
+    if similar.get("possible_duplicates"):
+        st.warning("Ce ticket ressemble à d'autres tickets déjà ouverts pour cette agence — vérifiez qu'il ne s'agit pas d'un doublon.")
+        for dup in similar["possible_duplicates"]:
+            st.markdown(
+                f'<div class="idc-list-row"><span>{dup["id"]} · {dup["subject"]}</span><span class="idc-list-value">{dup["similarity"]:.0%}</span></div>',
+                unsafe_allow_html=True,
+            )
+
+    if similar.get("similar_resolved"):
+        with st.expander("Tickets similaires déjà résolus (référence rapide)"):
+            for ref in similar["similar_resolved"]:
+                st.markdown(
+                    f'<div class="idc-list-row"><span>{ref["id"]} · {ref["subject"]}</span><span class="idc-list-value">{ref["similarity"]:.0%}</span></div>',
+                    unsafe_allow_html=True,
+                )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Accepter la suggestion", type="primary", width="stretch", key=f"ai_accept_{ticket_id}"):
+            try:
+                _backend().approve_ai_suggestions(
+                    st.session_state.auth_session["access_token"],
+                    ticket_id,
+                    prediction["category"],
+                    prediction["priority"],
+                    prediction["team_slug"],
+                    corrected=False,
+                    service_concerne=prediction.get("service_concerne"),
+                )
+                st.session_state.flash_message = "Suggestions IA acceptées. Ticket routé vers l'équipe et mis en cours."
+                st.session_state[f"ai_accepted_{ticket_id}"] = True
+                st.rerun()
+            except APIError as exc:
+                st.error(str(exc))
+    with col2:
+        if st.button("Rejeter et corriger", width="stretch", key=f"ai_reject_{ticket_id}"):
+            st.session_state[f"ai_rejecting_{ticket_id}"] = True
+            st.rerun()
+
+    if st.session_state.get(f"ai_rejecting_{ticket_id}"):
+        st.divider()
+        st.markdown("**Corriger la classification**")
+        teams = _load_teams()
+        corrected_category = st.selectbox("Catégorie logistique", LOGISTICS_CATEGORIES, key=f"ai_reject_category_{ticket_id}")
+        corrected_priority = st.selectbox("Priorité opérationnelle", PRIORITY_LEVELS, key=f"ai_reject_priority_{ticket_id}")
+        corrected_team = st.selectbox("Équipe", [(t["slug"], t["name"]) for t in teams], format_func=lambda x: x[1], key=f"ai_reject_team_{ticket_id}")
+        if st.button("Confirmer la correction", type="primary", width="stretch", key=f"ai_reject_confirm_{ticket_id}"):
+            try:
+                _backend().approve_ai_suggestions(
+                    st.session_state.auth_session["access_token"],
+                    ticket_id,
+                    corrected_category,
+                    corrected_priority,
+                    corrected_team[0],
+                    corrected=True,
+                )
+                st.session_state.flash_message = "Suggestion IA rejetée. Correction appliquée et IA réentraînée avec les nouvelles données."
+                st.session_state[f"ai_accepted_{ticket_id}"] = True
+                st.rerun()
+            except APIError as exc:
+                st.error(str(exc))
 
 
 def _render_ticket_audit(ticket_id: str) -> None:
@@ -103,99 +223,17 @@ def render_ticket_detail() -> None:
         st.success(st.session_state.flash_message)
         st.session_state.flash_message = ""
 
-    # Keep the accepted AI suggestion closed; it remains available through the
-    # audit log and can be reopened only when the agent explicitly needs it.
-    show_ai_suggestion = _role_label() == "Support_IT" and ticket["status"] in {"Créé", "En attente"}
+    # A newly created ticket must be classified by the agent before they can
+    # do anything else with it: the validation dialog below is a blocking
+    # modal (st.dialog), not an inline panel the agent could scroll past.
+    show_ai_suggestion = (
+        _role_label() == "Support_IT"
+        and ticket["status"] in {"Créé", "En attente"}
+        and not st.session_state.get(f"ai_accepted_{ticket_id}")
+        and not st.session_state.get(f"ai_dismissed_{ticket_id}")
+    )
     if show_ai_suggestion:
-        st.markdown(
-            """
-            <div class="ai-suggestion-box">
-              <div class="ai-suggestion-title">Suggestions générées par le modèle. Vérifiez et ajustez si nécessaire avant de valider.</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        
-        # Get AI prediction
-        try:
-            prediction = _backend().classify(
-                st.session_state.auth_session["access_token"],
-                ticket["subject"],
-                ticket["description"],
-                ticket.get("agency"),
-            )
-            teams = _load_teams()
-            
-            st.markdown(
-                f"""
-                <div class="ai-suggestion-box">
-                  <div class="ai-suggestion-title">Analyse ID Colis</div>
-                  <div class="ai-suggestion-item">
-                    <div class="ai-suggestion-label">Catégorie logistique:</div>
-                    <div class="ai-suggestion-value">{prediction['category']}</div>
-                  </div>
-                  <div class="ai-suggestion-item">
-                    <div class="ai-suggestion-label">Priorité opérationnelle:</div>
-                    <div class="ai-suggestion-value">{prediction['priority']}</div>
-                  </div>
-                  <div class="ai-suggestion-item">
-                    <div class="ai-suggestion-label">Équipe de routage:</div>
-                    <div class="ai-suggestion-value">{prediction['team_name']}</div>
-                  </div>
-                  <div class="ai-suggestion-item">
-                    <div class="ai-suggestion-label">Intervention terrain:</div>
-                    <div class="ai-suggestion-value">À confirmer par l’agent selon l’impact et le matériel concerné</div>
-                  </div>
-                  <div class="ai-suggestion-item">
-                    <div class="ai-suggestion-label">Fiabilité et justification:</div>
-                    <div class="ai-suggestion-value">{prediction['confidence']:.0%} · {prediction.get('notes', 'Analyse automatique')}</div>
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            
-            # Agent can accept or correct
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Accepter les suggestions", type="primary", width="stretch"):
-                    try:
-                        _backend().approve_ai_suggestions(
-                            st.session_state.auth_session["access_token"],
-                            ticket_id,
-                            prediction["category"],
-                            prediction["priority"],
-                            prediction["team_slug"],
-                            corrected=False,
-                            service_concerne=prediction.get("service_concerne")
-                        )
-                        st.session_state.flash_message = "Suggestions IA acceptées. Ticket routé vers l'équipe et mis en cours."
-                        st.session_state[f"ai_accepted_{ticket_id}"] = True
-                        st.rerun()
-                    except APIError as exc:
-                        st.error(str(exc))
-            
-            with col2:
-                with st.expander("Corriger et mettre à jour"):
-                    corrected_category = st.selectbox("Catégorie logistique", LOGISTICS_CATEGORIES)
-                    corrected_priority = st.selectbox("Priorité opérationnelle", PRIORITY_LEVELS)
-                    corrected_team = st.selectbox("Équipe", [(t["slug"], t["name"]) for t in teams], format_func=lambda x: x[1])
-                    if st.button("Confirmer et Mettre à jour", type="primary", width="stretch"):
-                        try:
-                            _backend().approve_ai_suggestions(
-                                st.session_state.auth_session["access_token"],
-                                ticket_id,
-                                corrected_category,
-                                corrected_priority,
-                                corrected_team[0],
-                                corrected=True
-                            )
-                            st.session_state.flash_message = "Correction appliquée. Ticket routé et IA retrainée avec les nouvelles données."
-                            st.rerun()
-                        except APIError as exc:
-                            st.error(str(exc))
-        except APIError:
-            st.warning("Impossible d'obtenir les suggestions IA.")
+        _render_ai_validation_dialog(ticket, ticket_id)
 
     # Ticket information uses the full content width. Role-specific controls
     # follow below it, keeping the operational record readable and separated
@@ -266,10 +304,15 @@ def render_ticket_detail() -> None:
                     interventions = []
                 if not interventions:
                     st.info('Aucun rapport d’intervention à valider.')
-                for report in interventions:
-                    title = f"{report.get('intervention_number', 'Intervention')} · {report.get('result', '')} · {report.get('review_status', 'En attente de validation')}"
+                for group in _group_identical_reports(interventions):
+                    report = group['report']
+                    duplicate_tag = f" · {group['count']} rapports identiques" if group['count'] > 1 else ""
+                    title = f"{report.get('intervention_number', 'Intervention')} · {report.get('result', '')} · {report.get('review_status', 'En attente de validation')}{duplicate_tag}"
                     with st.expander(title, expanded=report.get('review_status') != 'Approuvée'):
-                        st.caption(f"Créée le {report.get('created_at', '—')} · Dernière mise à jour {report.get('updated_at', '—')}")
+                        intervention_date = str(report.get('started_at') or report.get('created_at') or '—')[:10]
+                        st.caption(f"Date d'intervention : {intervention_date} · Dernière mise à jour {report.get('updated_at', '—')}")
+                        if group['count'] > 1:
+                            st.caption(f"Soumis {group['count']} fois à l'identique, entre {str(group['first_created_at'])[:10]} et {str(group['last_created_at'])[:10]}.")
                         details = (
                             ('Intervenant / contact client', report.get('contact_name')),
                             ('Diagnostic', report.get('diagnosis')),

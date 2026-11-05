@@ -138,6 +138,28 @@ def _load_tickets() -> list[Ticket]:
     return []
 
 
+def _group_identical_reports(reports: list[dict]) -> list[dict]:
+    """Collapse intervention reports that carry the same diagnosis/actions/
+    result into a single group, so a reviewer sees one entry with a count
+    instead of clicking through repeated, near-duplicate submissions."""
+    groups: dict[tuple, dict] = {}
+    order: list[tuple] = []
+    for report in reports:
+        key = (
+            (report.get("diagnosis") or "").strip(),
+            (report.get("actions_performed") or "").strip(),
+            (report.get("result") or "").strip(),
+        )
+        if key not in groups:
+            groups[key] = {"report": report, "count": 0, "first_created_at": report.get("created_at"), "last_created_at": report.get("created_at")}
+            order.append(key)
+        group = groups[key]
+        group["count"] += 1
+        group["report"] = report  # keep the most recent report as the representative
+        group["last_created_at"] = report.get("created_at")
+    return [groups[key] for key in order]
+
+
 def _load_teams() -> list[dict]:  # type: ignore
     if not st.session_state.auth_session:
         return []

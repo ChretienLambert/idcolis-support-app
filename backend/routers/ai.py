@@ -6,9 +6,16 @@ from sqlalchemy.orm import Session
 
 from ..auth.deps import get_current_user, require_role
 from ..db.session import get_db
-from ..dependencies import classifier, get_ticket_service
+from ..dependencies import classifier, get_ticket_service, self_help_advisor
 from ..models import Agent, Team, User
-from ..schemas import AITrainResponse, ClassificationRequest, ClassificationResultSchema
+from ..schemas import (
+    AIPerformanceSchema,
+    AITrainResponse,
+    ClassificationRequest,
+    ClassificationResultSchema,
+    SelfHelpRequest,
+    SelfHelpResponseSchema,
+)
 from ..services.tickets import TicketService
 
 router = APIRouter(prefix="/ai")
@@ -58,3 +65,19 @@ def train_ai(ticket_service: TicketService = Depends(get_ticket_service), user=D
     training_rows = ticket_service.get_training_data()
     samples = classifier.train(training_rows)
     return AITrainResponse(ok=True, samples=samples, model_name=classifier.model_name)
+
+
+@router.get("/performance", response_model=AIPerformanceSchema)
+def ai_performance(ticket_service: TicketService = Depends(get_ticket_service), user=Depends(require_role({"Support_IT"}))):
+    """How often agents accept the AI's suggestion as-is vs. correct it."""
+    return AIPerformanceSchema(**ticket_service.ai_performance())
+
+
+@router.post("/self-help", response_model=SelfHelpResponseSchema)
+def self_help(payload: SelfHelpRequest, user: User = Depends(get_current_user)):
+    """Offer a quick self-fix before a ticket is created, for problems simple
+    enough that the person likely doesn't need IT at all."""
+    article = self_help_advisor.suggest(payload.subject, payload.description)
+    if not article:
+        return SelfHelpResponseSchema(matched=False)
+    return SelfHelpResponseSchema(matched=True, title=article.title, steps=article.steps)

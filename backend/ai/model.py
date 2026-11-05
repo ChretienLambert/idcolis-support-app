@@ -74,6 +74,14 @@ class TicketRoutingModel:
                 "notes": "Connectivity routing.",
             },
         ]
+        # Phrases that signal a wide-impact outage regardless of which team the
+        # ticket routes to: these escalate priority on top of the base match
+        # instead of replacing it, since the category/team guess is unaffected.
+        self.urgency_phrases = [
+            "toute l'agence", "toute l’agence", "tous les postes", "plus aucun poste",
+            "personne ne peut", "plus rien ne fonctionne", "arret total", "arrêt total",
+            "panne totale", "depuis ce matin", "depuis hier", "urgent", "en urgence",
+        ]
 
     @staticmethod
     def _pipeline() -> Pipeline:
@@ -97,12 +105,12 @@ class TicketRoutingModel:
         station_context = station or ""
         text = f"{station_context} {subject} {description}"
         lowered = text.lower()
-        
+
         # Always try keyword prediction first - it's more reliable for known patterns
         keyword_prediction = self._keyword_predict(lowered)
         if keyword_prediction:
-            return keyword_prediction
-        
+            return self._apply_urgency_escalation(lowered, keyword_prediction)
+
         # Fallback to ML model if no keyword match
         if not self.category_model or not self.priority_model or not self.team_model:
             raise RuntimeError("Model not trained.")
@@ -114,19 +122,35 @@ class TicketRoutingModel:
         team_slug = self.team_model.classes_[team_probs.argmax()]
         confidence = float(max(category_probs.max(), priority_probs.max(), team_probs.max()))
         if confidence < 0.45:
-            return Prediction(
+            prediction = Prediction(
                 category="Autres",
                 priority="Moyenne",
                 team_slug="helpdesk-core",
                 confidence=confidence,
                 notes="Fallback rule triggered because the model confidence was low.",
             )
+        else:
+            prediction = Prediction(
+                category=str(category),
+                priority=str(priority),
+                team_slug=str(team_slug),
+                confidence=confidence,
+                notes="scikit-learn routing model",
+            )
+        return self._apply_urgency_escalation(lowered, prediction)
+
+    def _apply_urgency_escalation(self, lowered_text: str, prediction: Prediction) -> Prediction:
+        if prediction.priority == "Critique":
+            return prediction
+        matched = next((phrase for phrase in self.urgency_phrases if phrase in lowered_text), None)
+        if not matched:
+            return prediction
         return Prediction(
-            category=str(category),
-            priority=str(priority),
-            team_slug=str(team_slug),
-            confidence=confidence,
-            notes="scikit-learn routing model",
+            category=prediction.category,
+            priority="Critique",
+            team_slug=prediction.team_slug,
+            confidence=max(prediction.confidence, 0.9),
+            notes=f"{prediction.notes} | Priorité relevée à Critique: impact large signalé (« {matched} »).",
         )
 
     def _keyword_predict(self, lowered_text: str) -> Prediction | None:

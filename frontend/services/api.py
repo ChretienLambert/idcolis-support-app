@@ -181,4 +181,30 @@ class BackendAPI:
     def validate_ticket(self, access_token: str, ticket_id: str) -> dict[str, Any]:
         return self._json(self._request("POST", f"/tickets/{ticket_id}/validate", headers={"Authorization": f"Bearer {access_token}"}))  # type: ignore
 
+    def similar_tickets(self, access_token: str, ticket_id: str) -> dict[str, Any]:
+        return self._json(self._request("GET", f"/tickets/{ticket_id}/similar", headers={"Authorization": f"Bearer {access_token}"}))  # type: ignore
+
+    def recurring_issues(self, access_token: str, agency: str | None = None) -> list[dict[str, Any]]:
+        params = {"agency": agency} if agency else None
+        return self._json(self._request("GET", "/tickets/recurring-issues", params=params, headers={"Authorization": f"Bearer {access_token}"}))  # type: ignore
+
+    def connectivity_risk(self, access_token: str, agency: str | None = None, hours: int = 24) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"hours": hours}
+        if agency:
+            params["agency"] = agency
+        return self._json(self._request("GET", "/tickets/connectivity-risk", params=params, headers={"Authorization": f"Bearer {access_token}"}))  # type: ignore
+
+    def ai_performance(self, access_token: str) -> dict[str, Any]:
+        return self._json(self._request("GET", "/ai/performance", headers={"Authorization": f"Bearer {access_token}"}))  # type: ignore
+
+    def self_help(self, access_token: str, subject: str, description: str) -> dict[str, Any]:
+        return self._json(
+            self._request(
+                "POST",
+                "/ai/self-help",
+                headers={"Authorization": f"Bearer {access_token}"},
+                json={"subject": subject, "description": description},
+            )
+        )  # type: ignore
+
 

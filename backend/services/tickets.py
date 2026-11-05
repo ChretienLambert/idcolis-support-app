@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from datetime import UTC, timedelta
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..ai.model import Prediction, TicketRoutingModel
 from ..seed.demo import reference_training_rows
 from ..models import AIPrediction, Agent, AuditLog, Team, Ticket, TicketComment, User, UserAgency, utcnow
+
+RESOLVED_STATUSES = {"Résolu", "Clôturé"}
+OPEN_STATUSES = {"Créé", "Assigné", "En attente", "En cours", "En attente de validation", "À corriger"}
 
 
 class TicketService:
@@ -291,5 +298,123 @@ class TicketService:
         self.db.commit()
         self.db.refresh(ticket)
         return ticket
+
+    def find_similar_tickets(self, ticket: Ticket, limit: int = 3, threshold: float = 0.35) -> tuple[list[tuple[Ticket, float]], list[tuple[Ticket, float]]]:
+        """Compare a ticket's text against others in the same agency using
+        TF-IDF cosine similarity, to flag likely duplicates among open
+        tickets and surface already-resolved tickets with a similar fix."""
+        candidates = list(
+            self.db.execute(
+                select(Ticket).where(Ticket.agency == ticket.agency, Ticket.id != ticket.id)
+            ).scalars().all()
+        )
+        if not candidates:
+            return [], []
+        corpus = [f"{t.subject} {t.description}" for t in candidates]
+        corpus.append(f"{ticket.subject} {ticket.description}")
+        vectors = TfidfVectorizer(ngram_range=(1, 2), min_df=1, stop_words=None).fit_transform(corpus)
+        scores = cosine_similarity(vectors[-1], vectors[:-1])[0]
+        scored = [(candidates[i], float(scores[i])) for i in range(len(candidates)) if scores[i] >= threshold]
+        scored.sort(key=lambda pair: pair[1], reverse=True)
+        duplicates = [pair for pair in scored if pair[0].status in OPEN_STATUSES][:limit]
+        resolved = [pair for pair in scored if pair[0].status in RESOLVED_STATUSES][:limit]
+        return duplicates, resolved
+
+    def recurring_issues(self, agency: str | None = None, days: int = 30, min_count: int = 3) -> list[dict]:
+        """Group recent tickets by (agency, site, category) to surface a
+        problem that keeps coming back instead of being fixed once."""
+        since = utcnow() - timedelta(days=days)
+        stmt = select(Ticket).where(Ticket.created_at >= since)
+        if agency:
+            stmt = stmt.where(Ticket.agency == agency)
+        tickets = list(self.db.execute(stmt).scalars().all())
+        groups: dict[tuple[str | None, str | None, str], list[Ticket]] = {}
+        for t in tickets:
+            key = (t.agency, t.site, t.category)
+            groups.setdefault(key, []).append(t)
+        results = []
+        for (agency_name, site, category), items in groups.items():
+            if len(items) < min_count:
+                continue
+            latest = max(items, key=lambda t: t.created_at)
+            results.append(
+                {
+                    "agency": agency_name,
+                    "site": site,
+                    "category": category,
+                    "count": len(items),
+                    "latest_ticket_id": latest.id,
+                    "latest_created_at": latest.created_at,
+                }
+            )
+        results.sort(key=lambda row: row["count"], reverse=True)
+        return results
+
+    def ai_performance(self) -> dict:
+        """Summarize how often agents accept the AI's suggestion as-is versus
+        correct it, using the audit trail already written by
+        approve_ai_suggestions (no extra tracking table needed)."""
+        logs = list(
+            self.db.execute(
+                select(AuditLog).where(AuditLog.action == "approved_ai_suggestions").order_by(AuditLog.created_at.desc())
+            ).scalars().all()
+        )
+        total = len(logs)
+        corrected = sum(1 for log in logs if log.payload_json.get("corrected"))
+        accepted = total - corrected
+        recent_corrections = [
+            {
+                "ticket_id": log.entity_id,
+                "ai_suggested_category": log.payload_json.get("ai_suggested_category"),
+                "agent_modified_category": log.payload_json.get("agent_modified_category"),
+                "created_at": log.created_at.isoformat(),
+            }
+            for log in logs
+            if log.payload_json.get("corrected")
+        ][:5]
+        acceptance_rate = round((accepted / total) * 100, 1) if total else 0.0
+        return {
+            "total_decisions": total,
+            "accepted": accepted,
+            "corrected": corrected,
+            "acceptance_rate": acceptance_rate,
+            "recent_corrections": recent_corrections,
+        }
+
+    def connectivity_risk_tickets(self, agency: str | None = None, hours: int = 24) -> list[dict]:
+        """Flag Network/Connectivity tickets that have stayed unresolved past
+        the threshold. The ID Colis app itself runs offline, so a station
+        without connectivity for this long isn't just inconvenienced — it
+        likely isn't syncing or backing up its work, which needs a human
+        follow-up call, not just another ticket in the queue."""
+        threshold = (utcnow() - timedelta(hours=hours)).replace(tzinfo=None)
+        stmt = select(Ticket).where(
+            Ticket.category == "Network / Connectivity",
+            Ticket.status.not_in(RESOLVED_STATUSES),
+            Ticket.created_at <= threshold,
+        )
+        if agency:
+            stmt = stmt.where(Ticket.agency == agency)
+        tickets = list(self.db.execute(stmt).scalars().all())
+        results = []
+        now = utcnow()
+        for ticket in tickets:
+            created_at = ticket.created_at
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+            hours_open = (now - created_at).total_seconds() / 3600
+            results.append(
+                {
+                    "ticket_id": ticket.id,
+                    "subject": ticket.subject,
+                    "agency": ticket.agency,
+                    "site": ticket.site,
+                    "status": ticket.status,
+                    "hours_open": round(hours_open, 1),
+                    "created_at": ticket.created_at,
+                }
+            )
+        results.sort(key=lambda row: row["hours_open"], reverse=True)
+        return results
 
 
