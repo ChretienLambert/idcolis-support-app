@@ -43,6 +43,7 @@ class AuthService:
         self.db = db
 
     def _build_user_schema(self, user: User) -> AuthUserSchema:
+        assignment = self.db.execute(select(UserAgency).where(UserAgency.user_id == user.id)).scalar_one_or_none()
         return AuthUserSchema(
             id=user.id,
             email=user.email,
@@ -50,7 +51,8 @@ class AuthService:
             role=user.role.name,
             is_active=user.is_active,
             region=user.region,
-            department=user.department
+            department=user.department,
+            agency=assignment.agency if assignment else None,
         )
 
     def _issue_session(self, user: User, agency: str | None = None, station: str | None = None) -> AuthSessionSchema:
@@ -107,9 +109,15 @@ class AuthService:
             raise ValueError("Invalid credentials.")
         if not user.is_active:
             raise ValueError("Account disabled.")
-        if user.role.name == "Utilisateur":
+        if user.role.name in {"Utilisateur", "Régulateur_Agence", "Support_IT"}:
             assignment = self.db.execute(select(UserAgency).where(UserAgency.user_id == user.id)).scalar_one_or_none()
-            if not assignment or assignment.agency != agency or (station and assignment.station != station):
+            if user.role.name == "Utilisateur":
+                if not assignment or assignment.agency != agency or (station and assignment.station != station):
+                    raise ValueError("This account is not assigned to the selected agency.")
+            elif user.role.name == "Régulateur_Agence":
+                if not assignment or assignment.agency != agency:
+                    raise ValueError("This regulator is not assigned to the selected agency.")
+            elif assignment and agency and assignment.agency != agency:
                 raise ValueError("This account is not assigned to the selected agency.")
         return self._issue_session(user, agency, station)
 
@@ -146,7 +154,12 @@ class AuthService:
         if not user:
             raise ValueError("User not found.")
         # The tenant is attached to the request user for downstream authorization.
-        user._agency_scope = payload.get("agency")
+        token_agency = payload.get("agency")
+        if user.role.name == "Régulateur_Agence":
+            assignment = self.db.execute(select(UserAgency).where(UserAgency.user_id == user.id)).scalar_one_or_none()
+            user._agency_scope = assignment.agency if assignment else token_agency
+        else:
+            user._agency_scope = token_agency
         return user
 
     def token_agency(self, access_token: str) -> str | None:

@@ -28,6 +28,25 @@ Copy `.env.example` to `.env`. Configure `IDCOLIS_DATABASE_URL`, `IDCOLIS_JWT_SE
 
 This development-only command replaces stale ticket activity with current tickets attached to the agency users and posts. It must not be used against production data.
 
+## Schema migrations
+
+The database schema is versioned with Alembic (`alembic/`), configured against `IDCOLIS_DATABASE_URL`.
+
+- First run on a brand-new database: starting the API creates the current schema automatically, then stamp it so Alembic knows it is up to date:
+  ```powershell
+  .\.venv\Scripts\python.exe -m backend.serve
+  .\.venv\Scripts\python.exe -m alembic stamp head
+  ```
+- Upgrading an existing deployment after pulling schema changes:
+  ```powershell
+  .\.venv\Scripts\python.exe -m alembic upgrade head
+  ```
+- After changing a SQLAlchemy model, generate the migration instead of hand-editing columns:
+  ```powershell
+  .\.venv\Scripts\python.exe -m alembic revision --autogenerate -m "describe the change"
+  ```
+  Review the generated script in `alembic/versions/` before committing it.
+
 ## Troubleshooting
 
 - Backend unavailable: verify port 8000 and `IDCOLIS_API_URL`.

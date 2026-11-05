@@ -36,6 +36,7 @@ The development directory contains eight locations per agency, two posts per loc
 ## Verification checklist
 
 - `python -m compileall -q backend frontend scripts`
+- `python -m pip install -r requirements-dev.txt` then `python -m pytest`
 - `python scripts/test_agency_workflows.py`
 - Verify `/api/health` returns HTTP 200.
 - Log in through both agency routes and confirm tenant isolation.

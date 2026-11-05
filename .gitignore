@@ -41,3 +41,6 @@ backend/*.db
 
 # Installer output
 /installer/build/
+
+# Local scratch output
+/tmp/

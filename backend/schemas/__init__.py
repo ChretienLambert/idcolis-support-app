@@ -6,6 +6,18 @@ from typing import Any, Literal
 from pydantic import BaseModel, EmailStr, Field
 
 
+TICKET_STATUSES = (
+    "Créé",
+    "Assigné",
+    "En attente",
+    "En cours",
+    "En attente de validation",
+    "À corriger",
+    "Résolu",
+    "Clôturé",
+)
+
+
 class RoleSchema(BaseModel):
     id: int
     name: str
@@ -39,6 +51,7 @@ class AuthUserSchema(BaseModel):
     is_active: bool
     region: str | None = None
     department: str | None = None
+    agency: str | None = None
 
 
 class AuthSessionSchema(BaseModel):
@@ -89,7 +102,10 @@ class TicketAssignmentCreate(BaseModel):
 class TicketUpdate(BaseModel):
     subject: str | None = None
     description: str | None = None
-    status: Literal["Ouvert", "En cours", "En attente", "Résolu", "Clôturé", "Intervention terrain"] | None = None
+    status: Literal[
+        "Créé", "Assigné", "En attente", "En cours", "En attente de validation",
+        "À corriger", "Résolu", "Clôturé"
+    ] | None = None
     category: str | None = None
     priority: str | None = None
 
@@ -184,7 +200,7 @@ class InterventionCreate(BaseModel):
     equipment_involved: str | None = None
     materials_used: str | None = None
     tests_performed: str | None = None
-    result: Literal["Brouillon", "Résolu", "Partiellement résolu", "Non résolu", "Escaladé"] = "Brouillon"
+    result: Literal["En cours", "Suspendu", "Résolu", "Brouillon", "Partiellement résolu", "Non résolu", "Escaladé"] = "En cours"
     follow_up: str | None = None
     resolution_notes: str | None = None
     technician_notes: str | None = None
@@ -198,6 +214,16 @@ class InterventionSchema(InterventionCreate):
     technician_user_id: str | None = None
     created_at: datetime
     updated_at: datetime
+    review_status: str = "En attente de validation"
+    review_feedback: str | None = None
+    reviewed_by_user_id: str | None = None
+    reviewed_at: datetime | None = None
+    user_validated_at: datetime | None = None
+
+
+class InterventionReview(BaseModel):
+    decision: Literal["approved", "correction_required"]
+    feedback: str = ""
 
 
 class ClassificationResultSchema(BaseModel):

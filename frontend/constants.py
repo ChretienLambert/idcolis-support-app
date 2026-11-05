@@ -1,7 +1,20 @@
 from __future__ import annotations
 
 APP_TITLE = "ID Colis Support App"
-BACKEND_URL = "http://localhost:8000"
+BACKEND_URL = "http://127.0.0.1:8000"
+
+LOGISTICS_CATEGORIES = [
+    "Fleet / Driver App",
+    "Scanning / Hardware",
+    "Waybill / Manifest Sync",
+    "Account / Authentication",
+    "Network / Connectivity",
+    "ID Colis Application",
+    "Data / Reporting",
+    "Autres",
+]
+
+PRIORITY_LEVELS = ["Faible", "Moyenne", "Élevée", "Critique"]
 
 NAVY = "#102A43"
 BLUE = "#2F80ED"
@@ -17,8 +30,8 @@ SOFT_YELLOW = "#FFF5D6"
 SOFT_RED = "#FDE8E8"
 
 AGENCY_STATIONS = {
-    "Global Voyages": ["Bafoussam >> Douala", "Bafoussam >> Yaoundé", "Biyem-Assi", "DLA-Bépanda", "DLA-Brazzaville", "DLA-Mboppi", "DLA-Village", "Douala Akwa"],
-    "Trésor Voyages": ["Bafoussam", "Baneghang", "DLA-Bépanda", "DLA-Bonabéri", "DLA-Brazzaville", "DLA-Village", "Dschang", "Mvan 2"],
+    "Global Voyages": ["Bafoussam Centre", "Biyem-Assi", "DLA-Bépanda", "DLA-Brazzaville", "DLA-Mboppi", "DLA-Village", "Douala Akwa", "Yaoundé Centre"],
+    "Trésor Voyages": ["Bafoussam Centre", "Baneghang", "DLA-Bépanda", "DLA-Bonabéri", "DLA-Brazzaville", "DLA-Village", "Dschang", "Mvan 2"],
 }
 
 DEMO_AGENT_NAMES = [
@@ -38,10 +51,16 @@ USER_PAGES = [
 AGENT_PAGES = [
     ("Tableau de bord", "agent_dashboard"),
     ("Agences et postes", "directory"),
-    ("Nouveau ticket", "ticket_create"),
     ("Tous les tickets", "agent_queue"),
     ("Interventions terrain", "interventions"),
     ("Diagnostics système", "diagnostics"),
+]
+
+REGULATOR_PAGES = [
+    ("Tableau de bord", "agent_dashboard"),
+    ("Tous les tickets", "regulator_all_tickets"),
+    ("Tickets à valider", "regulator_queue"),
+    ("Agences et postes", "directory"),
 ]
 
 

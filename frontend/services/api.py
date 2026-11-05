@@ -68,8 +68,12 @@ class BackendAPI:
     def me(self, access_token: str) -> dict[str, Any]:
         return self._json(self._request("GET", "/auth/me", headers={"Authorization": f"Bearer {access_token}"}))  # type: ignore
 
-    def list_tickets(self, access_token: str) -> list[dict[str, Any]]:
-        return self._json(self._request("GET", "/tickets", headers={"Authorization": f"Bearer {access_token}"}))  # type: ignore
+    def list_tickets(self, access_token: str, agency: str | None = None) -> list[dict[str, Any]]:
+        params = {"agency": agency} if agency else None
+        response = self._request("GET", "/tickets", params=params, headers={"Authorization": f"Bearer {access_token}"})
+        payload = self._json(response)
+        self.logger.info("tickets_loaded agency=%s count=%s", agency, len(payload) if isinstance(payload, list) else "invalid")
+        return payload  # type: ignore
 
     def directory(self, access_token: str) -> list[dict[str, Any]]:
         return self._json(self._request("GET", "/directory", headers={"Authorization": f"Bearer {access_token}"}))  # type: ignore
@@ -170,5 +174,11 @@ class BackendAPI:
 
     def update_intervention(self, access_token: str, intervention_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._json(self._request("PATCH", f"/interventions/{intervention_id}", headers={"Authorization": f"Bearer {access_token}"}, json=payload))  # type: ignore
+
+    def review_intervention(self, access_token: str, intervention_id: str, decision: str, feedback: str = "") -> dict[str, Any]:
+        return self._json(self._request("POST", f"/interventions/{intervention_id}/review", headers={"Authorization": f"Bearer {access_token}"}, json={"decision": decision, "feedback": feedback}))  # type: ignore
+
+    def validate_ticket(self, access_token: str, ticket_id: str) -> dict[str, Any]:
+        return self._json(self._request("POST", f"/tickets/{ticket_id}/validate", headers={"Authorization": f"Bearer {access_token}"}))  # type: ignore
 
 

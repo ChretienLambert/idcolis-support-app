@@ -8,19 +8,13 @@ import streamlit as st
 # Add current directory to path for absolute imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from components.render import (
-    render_agent_dashboard,
-    render_agent_queue,
-    render_login,
-    render_ticket_create,
-    render_ticket_detail,
-    render_user_home,
-    render_user_tickets,
-    render_interventions,
-    render_diagnostics,
-    render_directory,
-    render_directory_user_tickets,
-)
+from components.pages.agent_pages import render_agent_dashboard, render_agent_queue
+from components.pages.diagnostics import render_diagnostics
+from components.pages.directory import render_directory, render_directory_user_tickets
+from components.pages.interventions import render_interventions
+from components.pages.login import render_login
+from components.pages.ticket_detail import render_ticket_detail
+from components.pages.user_pages import render_ticket_create, render_user_home, render_user_tickets
 from services.api import BackendAPI, APIError
 from services.session import clear_session, ensure_state, load_query_navigation, load_query_session, set_navigation, set_session
 from views.layout import inject_styles
@@ -56,7 +50,8 @@ def _restore_navigation_from_query() -> None:
 
 def main() -> None:
     ensure_state()
-    st.set_page_config(page_title="ID Colis Support App", page_icon="📦", layout="wide", initial_sidebar_state="expanded")
+    st.session_state.dark_mode = False
+    st.set_page_config(page_title="ID Colis Support App", page_icon="ID", layout="wide", initial_sidebar_state="expanded")
     inject_styles()
     _restore_from_query()
     _restore_navigation_from_query()
@@ -78,6 +73,9 @@ def main() -> None:
     with st.sidebar:
         render_sidebar(role)
     page = st.session_state.get("page", "user_home")
+    if page == "ticket_create" and role != "Utilisateur":
+        st.session_state.page = "agent_dashboard"
+        st.rerun()
     if page == "user_home":
         render_user_home()
     elif page == "ticket_create":
@@ -91,6 +89,10 @@ def main() -> None:
     elif page == "directory_user_tickets":
         render_directory_user_tickets()
     elif page == "agent_queue":
+        render_agent_queue()
+    elif page == "regulator_queue":
+        render_agent_queue()
+    elif page == "regulator_all_tickets":
         render_agent_queue()
     elif page == "ticket_detail":
         render_ticket_detail()

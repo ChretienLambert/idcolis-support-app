@@ -2,11 +2,15 @@
 
 from sqlalchemy import delete, select
 
-from backend.app import _seed_directory, _seed_user_agencies, ensure_demo_data, classifier
-from backend.db.session import SessionLocal
-from backend.models import AIPrediction, AuditLog, Ticket, TicketComment, User, UserAgency
+from backend.db.base import Base
+from backend.db.session import SessionLocal, engine
+from backend.dependencies import classifier
+from backend.models import AIPrediction, AuditLog, Intervention, InterventionAttachment, Ticket, TicketComment, User, UserAgency
+from backend.seed.demo import ensure_demo_data, reference_training_rows
 from backend.services.tickets import TicketService
-from backend.seed.demo import reference_training_rows
+from backend.startup import seed_directory, seed_regulators, seed_user_agencies
+
+Base.metadata.create_all(bind=engine)
 
 
 TICKETS = [
@@ -32,15 +36,16 @@ TICKETS = [
 def main() -> None:
     with SessionLocal() as db:
         ensure_demo_data(db)
-        _seed_directory(db)
-        _seed_user_agencies(db)
-        for model in (TicketComment, AIPrediction, Ticket, AuditLog):
+        seed_directory(db)
+        seed_user_agencies(db)
+        seed_regulators(db)
+        for model in (InterventionAttachment, Intervention, TicketComment, AIPrediction, Ticket, AuditLog):
             db.execute(delete(model))
         db.commit()
 
         classifier.train(reference_training_rows())
         service = TicketService(db, classifier)
-        assignments = db.execute(select(UserAgency, User).join(User, User.id == UserAgency.user_id).order_by(UserAgency.agency, UserAgency.station, UserAgency.post)).all()
+        assignments = db.execute(select(UserAgency, User).join(User, User.id == UserAgency.user_id).where(UserAgency.station.is_not(None)).order_by(UserAgency.agency, UserAgency.station, UserAgency.post)).all()
         if not assignments:
             raise RuntimeError("No agency users were found after seeding the directory.")
         assignments_by_agency = {}

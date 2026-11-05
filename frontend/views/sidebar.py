@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import mimetypes
 import sys
 from pathlib import Path
 
@@ -8,10 +10,15 @@ import streamlit as st
 # Add parent directory to path for absolute imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from constants import AGENT_PAGES, NAVY, USER_PAGES
+from constants import AGENT_PAGES, NAVY, REGULATOR_PAGES, USER_PAGES
 from services.session import set_navigation
 
 LOGO_DIR = Path(__file__).resolve().parents[1] / "assets" / "logos"
+
+
+def _logo_data_uri(path: Path) -> str:
+    mime = mimetypes.guess_type(path.name)[0] or "image/png"
+    return f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
 
 
 def render_sidebar(role: str | None) -> None:
@@ -20,6 +27,7 @@ def render_sidebar(role: str | None) -> None:
     # Clean display for roles
     role_display_map = {
         "Support_IT": "Agent Support IT",
+        "Régulateur_Agence": "Régulateur agence",
         "Utilisateur": "Utilisateur final"
     }
     display_role = role_display_map.get(role, role) if role else ""
@@ -27,11 +35,11 @@ def render_sidebar(role: str | None) -> None:
     st.sidebar.markdown(
         f"""
         <div style="padding:1rem 0 0.8rem 0;">
-          <div style="font-weight:900;font-size:1.1rem;color:{NAVY};">ID Colis</div>
-          <div style="color:#627D98;font-size:.92rem;margin-top:.15rem;">Support terrain et logistique</div>
-          <div style="margin-top:.8rem;padding:.75rem .9rem;border-radius:16px;background:white;border:1px solid rgba(16,42,67,0.08);">
-            <div style="font-weight:800;color:{NAVY};">{user.get("full_name","")}</div>
-            <div style="color:#627D98;font-size:.9rem;">{display_role}</div>
+          <div style="font-weight:900;font-size:1.1rem;color:var(--idc-navy);">ID Colis</div>
+          <div style="color:var(--idc-muted);font-size:.92rem;margin-top:.15rem;">Support terrain et logistique</div>
+          <div style="margin-top:.8rem;padding:.75rem .9rem;border-radius:16px;background:var(--idc-card);border:1px solid var(--idc-border);">
+            <div style="font-weight:800;color:var(--idc-navy);">{user.get("full_name","")}</div>
+            <div style="color:var(--idc-muted);font-size:.9rem;">{display_role}</div>
           </div>
         </div>
         """,
@@ -41,14 +49,27 @@ def render_sidebar(role: str | None) -> None:
     logo = "tresor-voyages.jpg" if selected_station.startswith("Trésor") else "global-voyages.png"
     agency_color = "#2F7D4A" if selected_station.startswith("Trésor") else "#246BCE"
     st.sidebar.markdown(
-        f"<style>[data-testid='stSidebar']{{border-top:7px solid {agency_color};}} [data-testid='stSidebar'] .stButton > button[kind='primary']{{background:{agency_color} !important;border-color:{agency_color} !important;}}</style>",
+        f"<style>:root{{--idc-agency:{agency_color};}} [data-testid='stSidebar']{{border-top:7px solid {agency_color};}} [data-testid='stSidebar'] .stButton > button[kind='primary']{{background:{agency_color} !important;border-color:{agency_color} !important;}}</style>",
         unsafe_allow_html=True,
     )
-    st.sidebar.image(str(LOGO_DIR / logo), width=64)
-    st.sidebar.markdown(f"<div style='color:{agency_color};font-weight:800;'>{selected_station}</div>", unsafe_allow_html=True)
-    pages = AGENT_PAGES if role == "Support_IT" else USER_PAGES
+    logo_uri = _logo_data_uri(LOGO_DIR / logo)
+    st.sidebar.markdown(
+        f"<div class='sidebar-logo-wrap'><img class='sidebar-logo' src='{logo_uri}' alt='{selected_station} logo'></div>",
+        unsafe_allow_html=True,
+    )
+    st.sidebar.markdown(f"<div class='sidebar-agency' style='color:{agency_color};'>{selected_station}</div>", unsafe_allow_html=True)
+    # ID Colis uses a clear light operational interface. Dark mode was removed
+    # because it reduced contrast and did not add value for field workflows.
+    st.session_state.dark_mode = False
+    pages = AGENT_PAGES if role == "Support_IT" else REGULATOR_PAGES if role == "Régulateur_Agence" else USER_PAGES
+    if role == "Support_IT":
+        st.sidebar.markdown("<div class='idc-eyebrow' style='margin:.8rem 0 .45rem;'>Support</div>", unsafe_allow_html=True)
     current = st.session_state.get("page", "login")
     for label, key in pages:
+        if role == "Support_IT" and key == "interventions":
+            st.sidebar.markdown("<div class='idc-eyebrow' style='margin:.8rem 0 .45rem;'>Opérations</div>", unsafe_allow_html=True)
+        if role == "Support_IT" and key == "diagnostics":
+            st.sidebar.markdown("<div class='idc-eyebrow' style='margin:.8rem 0 .45rem;'>Administration</div>", unsafe_allow_html=True)
         pressed = st.sidebar.button(label, key=f"nav_{key}", width="stretch", type="primary" if current == key else "secondary")
         if pressed:
             set_navigation(key)

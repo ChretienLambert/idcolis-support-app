@@ -1,5 +1,10 @@
 """Exercise one end-user to support-agent workflow in each tenant."""
 
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from sqlalchemy import select
 
 from backend.ai.model import TicketRoutingModel
@@ -24,11 +29,10 @@ def main() -> None:
             assignment, user = db.execute(
                 select(UserAgency, User)
                 .join(User, User.id == UserAgency.user_id)
-                .where(UserAgency.agency == agency)
+                .where(UserAgency.agency == agency, UserAgency.station.is_not(None))
                 .order_by(UserAgency.station, UserAgency.post)
             ).first()
 
-            user_session = auth.sign_in(None, "IDColis2024!", agency, assignment.station, user.full_name)
             ticket = service.create_ticket(
                 requester_user_id=user.id,
                 created_by_user_id=user.id,
@@ -37,7 +41,7 @@ def main() -> None:
                 metadata={
                     "agency": agency,
                     "site": assignment.station,
-                    "city": assignment.station,
+                    "city": "Douala" if assignment.station.startswith("DLA-") else assignment.station.split(" ", 1)[0],
                     "operational_impact": "Individuel",
                     "field_intervention_required": False,
                 },

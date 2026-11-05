@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..ai.model import Prediction, TicketRoutingModel
 from ..seed.demo import reference_training_rows
-from ..models import AIPrediction, Agent, AuditLog, Team, Ticket, TicketComment, User, utcnow
+from ..models import AIPrediction, Agent, AuditLog, Team, Ticket, TicketComment, User, UserAgency, utcnow
 
 
 class TicketService:
@@ -22,8 +22,11 @@ class TicketService:
                 raise PermissionError("Forbidden")
             return
 
-        if user.role.name == "Support_IT":
+        if user.role.name in {"Support_IT", "Régulateur_Agence"}:
             tenant = getattr(user, "_agency_scope", None)
+            if user.role.name == "Régulateur_Agence" and not tenant:
+                assignment = self.db.execute(select(UserAgency).where(UserAgency.user_id == user.id)).scalar_one_or_none()
+                tenant = assignment.agency if assignment else None
             if tenant and ticket.agency != tenant:
                 raise PermissionError("This ticket belongs to another agency.")
             return
@@ -83,15 +86,20 @@ class TicketService:
         stmt = select(Ticket).order_by(Ticket.created_at.desc())
         if user.role.name == "Utilisateur":
             stmt = stmt.where(Ticket.requester_user_id == user.id)
-        elif user.role.name == "Support_IT":
+        elif user.role.name in {"Support_IT", "Régulateur_Agence"}:
             tenant = getattr(user, "_agency_scope", None)
+            if user.role.name == "Régulateur_Agence" and not tenant:
+                assignment = self.db.execute(select(UserAgency).where(UserAgency.user_id == user.id)).scalar_one_or_none()
+                tenant = assignment.agency if assignment else None
             if tenant:
                 stmt = stmt.where(Ticket.agency == tenant)
         else:
             return []
         if priority:
             stmt = stmt.where(Ticket.priority == priority)
-        if status:
+        # Regulators receive the complete agency queue by default. Their view
+        # must include untouched tickets as well as tickets already handled by IT.
+        if status and user.role.name != "Régulateur_Agence":
             stmt = stmt.where(Ticket.status == status)
         if agency:
             stmt = stmt.where(Ticket.agency == agency)
@@ -125,7 +133,7 @@ class TicketService:
             field_intervention_required=(metadata or {}).get("field_intervention_required", False),
             category=prediction.category,
             priority=prediction.priority,
-            status="En attente",
+            status="Créé",
             service_concerne=None,
             team_id=team.id,
             assigned_agent_id=primary_agent.id if primary_agent else None,
@@ -166,8 +174,8 @@ class TicketService:
         agent = self.db.get(User, agent_user_id)
         if agent is not None:
             self._ensure_ticket_access(ticket, agent)
-        if ticket.status != "En attente":
-            raise ValueError("Only 'En attente' tickets can be approved.")
+        if ticket.status not in {"Créé", "En attente"}:
+            raise ValueError("Only newly created or pending tickets can be approved.")
         
         team = self._team_by_slug(team_slug)
         agent_profile = self._agent_for_user(agent_user_id)
@@ -177,7 +185,7 @@ class TicketService:
         ticket.service_concerne = service_concerne or team.name
         ticket.team_id = team.id
         ticket.assigned_agent_id = agent_profile.id if agent_profile else None
-        ticket.status = "En cours"
+        ticket.status = "Assigné"
         ticket.updated_at = utcnow()
         
         # Record AI prediction
@@ -195,7 +203,7 @@ class TicketService:
             "priority": priority,
             "team": team.name,
             "corrected": corrected,
-            "status": "En cours",
+            "status": "Assigné",
         }
         
         if corrected:
@@ -232,6 +240,12 @@ class TicketService:
         actor = self.db.get(User, actor_user_id) if actor_user_id else None
         if actor is not None:
             self._ensure_ticket_access(ticket, actor)
+        allowed_statuses = {
+            "Créé", "Assigné", "En attente", "En cours",
+            "En attente de validation", "À corriger", "Résolu", "Clôturé",
+        }
+        if status_value not in allowed_statuses:
+            raise ValueError("Invalid ticket status.")
         if ticket.status == "Clôturé":
             raise ValueError("Closed tickets cannot be modified.")
         ticket.status = status_value
