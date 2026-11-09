@@ -56,7 +56,7 @@ class TicketRoutingModel:
                 "team_slug": "identity-access",
                 "category": "Account / Authentication",
                 "priority": "Élevée",
-                "keywords": ["compte", "connexion", "login", "mot de passe", "authentification", "bloqué", "password"],
+                "keywords": ["compte", "connexion", "login", "mot de passe", "authentification", "bloqué", "password", "outlook", "email", "e-mail", "messagerie", "courriel", "boîte mail", "sharepoint"],
                 "notes": "Identity and access routing.",
             },
             {

@@ -888,6 +888,10 @@ def ensure_demo_data(db: Session) -> None:
 
     agents = [
         {"email": "support@idcolis.cm", "full_name": "Support IT", "team_slug": "identity-access", "password": "Support123!"},
+        {"email": "reseau@idcolis.cm", "full_name": "Boris Tchana", "team_slug": "network-connectivity", "password": "Support123!"},
+        {"email": "waybill@idcolis.cm", "full_name": "Clarisse Ndomo", "team_slug": "waybill-sync", "password": "Support123!"},
+        {"email": "materiel@idcolis.cm", "full_name": "Didier Foka", "team_slug": "scanning-hardware", "password": "Support123!"},
+        {"email": "flotte@idcolis.cm", "full_name": "Estelle Mvondo", "team_slug": "fleet-driver", "password": "Support123!"},
     ]
     for agent_data in agents:
         user = ensure_user(agent_data["email"], agent_data["full_name"], "Support_IT", agent_data["password"])
@@ -940,6 +944,17 @@ def ensure_demo_data(db: Session) -> None:
     db.commit()
 
     from sqlalchemy import func
+
+    from ..ai.model import TicketRoutingModel
+
+    team_slug_aliases = {
+        "helpdesk-core": "identity-access",
+        "network": "network-connectivity",
+        "applications": "waybill-sync",
+        "hardware": "scanning-hardware",
+    }
+    routing_model = TicketRoutingModel()
+
     def create_initial_ticket(email: str, subject: str, description: str):
         stmt = select(User).where(User.email == email)
         user = db.execute(stmt).scalar_one_or_none()
@@ -951,20 +966,47 @@ def ensure_demo_data(db: Session) -> None:
         count = db.execute(select(func.count()).select_from(Ticket)).scalar_one()
         tkt_id = f"TKT-2026-{count + 1:05d}"
 
+        # Run the same AI routing used for real tickets (TicketService.create_ticket)
+        # instead of hardcoding a category/team, so demo tickets aren't stuck on
+        # "Autres" with no agent assigned.
+        prediction = routing_model.predict(subject, description)
+        team_slug = team_slug_aliases.get(prediction.team_slug, prediction.team_slug)
+        team = db.execute(select(Team).where(Team.slug == team_slug)).scalar_one_or_none()
+        if not team:
+            team = db.execute(select(Team).where(Team.slug == "identity-access")).scalar_one()
+        agent = db.execute(
+            select(Agent).where(Agent.team_id == team.id, Agent.is_active.is_(True), Agent.is_primary.is_(True))
+        ).scalar_one_or_none()
+        if not agent:
+            agent = db.execute(select(Agent).where(Agent.team_id == team.id, Agent.is_active.is_(True))).scalars().first()
+
         ticket = Ticket(
             id=tkt_id,
             requester_user_id=user.id,
             created_by_user_id=user.id,
             subject=subject,
             description=description,
-            category="Autres",
-            priority="Moyenne",
+            category=prediction.category,
+            priority=prediction.priority,
             status="En attente",
-            team_id=db.execute(select(Team).where(Team.slug == "identity-access")).scalar_one().id,
+            team_id=team.id,
+            assigned_agent_id=agent.id if agent else None,
             created_at=utcnow(),
             updated_at=utcnow(),
         )
         db.add(ticket)
+        db.add(
+            AIPrediction(
+                ticket_id=ticket.id,
+                model_name=routing_model.model_name,
+                category=prediction.category,
+                priority=prediction.priority,
+                team_id=team.id,
+                agent_id=agent.id if agent else None,
+                confidence=prediction.confidence,
+                features_json={"notes": prediction.notes},
+            )
+        )
         db.commit()
 
     initial_tickets = [
