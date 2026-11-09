@@ -11,8 +11,8 @@ from ..auth.deps import get_current_user, require_role
 from ..config import settings
 from ..db.session import get_db
 from ..models import Intervention, InterventionAttachment, Ticket, utcnow
-from ..schemas import InterventionCreate, InterventionReview, InterventionSchema, TicketDetailSchema
-from ..serializers import ticket_detail
+from ..schemas import InterventionCreate, InterventionReview, InterventionSchema, InterventionUpdate, TicketDetailSchema
+from ..serializers import intervention_schema, ticket_detail
 
 router = APIRouter()
 
@@ -39,7 +39,7 @@ def create_intervention(ticket_id: str, payload: InterventionCreate, db: Session
     db.add(intervention)
     db.commit()
     db.refresh(intervention)
-    return intervention
+    return intervention_schema(intervention)
 
 
 @router.get("/tickets/{ticket_id}/interventions", response_model=list[InterventionSchema])
@@ -48,11 +48,12 @@ def list_interventions(ticket_id: str, db: Session = Depends(get_db), user=Depen
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
     _check_agency_scope(user, ticket)
-    return list(db.execute(select(Intervention).where(Intervention.ticket_id == ticket_id).order_by(Intervention.created_at.asc())).scalars().all())
+    interventions = db.execute(select(Intervention).where(Intervention.ticket_id == ticket_id).order_by(Intervention.created_at.asc())).scalars().all()
+    return [intervention_schema(item) for item in interventions]
 
 
 @router.patch("/interventions/{intervention_id}", response_model=InterventionSchema)
-def update_intervention(intervention_id: str, payload: InterventionCreate, db: Session = Depends(get_db), user=Depends(require_role({"Support_IT"}))):
+def update_intervention(intervention_id: str, payload: InterventionUpdate, db: Session = Depends(get_db), user=Depends(require_role({"Support_IT"}))):
     intervention = db.get(Intervention, intervention_id)
     if not intervention:
         raise HTTPException(status_code=404, detail="Intervention not found")
@@ -73,7 +74,7 @@ def update_intervention(intervention_id: str, payload: InterventionCreate, db: S
         intervention.ticket.resolved_at = utcnow() if intervention.result == "Résolu" else None
     db.commit()
     db.refresh(intervention)
-    return intervention
+    return intervention_schema(intervention)
 
 
 @router.post("/interventions/{intervention_id}/review", response_model=InterventionSchema)
@@ -97,7 +98,7 @@ def review_intervention(intervention_id: str, payload: InterventionReview, db: S
     intervention.ticket.status = "En attente de validation" if payload.decision == "approved" else "À corriger"
     db.commit()
     db.refresh(intervention)
-    return intervention
+    return intervention_schema(intervention)
 
 
 @router.post("/tickets/{ticket_id}/validate", response_model=TicketDetailSchema)

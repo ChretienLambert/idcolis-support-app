@@ -272,6 +272,11 @@ def render_ticket_detail() -> None:
                 st.session_state.selected_ticket_id = updated['id']
                 st.rerun()
 
+        if ticket['status'] in {'Résolu', 'Clôturé'}:
+            if st.button('📄 Voir le rapport d’opération', key=f"view_report_{ticket_id}", width='stretch'):
+                set_navigation('operation_report', ticket_id)
+                st.rerun()
+
         if ticket['status'] == 'Clôturé':
             st.info("Ticket clôturé. Les commentaires restent disponibles, mais aucune modification n'est autorisée.")
         if _role_label() == 'Utilisateur' and ticket['status'] == 'En attente de validation':

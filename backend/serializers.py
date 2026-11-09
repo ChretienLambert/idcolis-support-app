@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .models import Agent, Team, Ticket, User
-from .schemas import AgentSchema, AuthUserSchema, TeamSchema, TicketDetailSchema, TicketSummarySchema
+from .models import Agent, Intervention, Team, Ticket, User
+from .schemas import AgentSchema, AuthUserSchema, InterventionSchema, TeamSchema, TicketDetailSchema, TicketSummarySchema
 
 
 def user_schema(user: User) -> AuthUserSchema:
@@ -89,6 +89,39 @@ def ticket_detail(ticket: Ticket) -> TicketDetailSchema:
             }
             for comment in ticket.comments
         ],
+    )
+
+
+def intervention_schema(intervention: Intervention) -> InterventionSchema:
+    return InterventionSchema(
+        id=intervention.id,
+        ticket_id=intervention.ticket_id,
+        intervention_number=intervention.intervention_number,
+        agency=intervention.agency,
+        site=intervention.site,
+        city=intervention.city,
+        started_at=intervention.started_at,
+        contact_name=intervention.contact_name,
+        diagnosis=intervention.diagnosis,
+        actions_performed=intervention.actions_performed or "",
+        equipment_involved=intervention.equipment_involved,
+        materials_used=intervention.materials_used,
+        tests_performed=intervention.tests_performed,
+        result=intervention.result,
+        follow_up=intervention.follow_up,
+        resolution_notes=intervention.resolution_notes,
+        technician_notes=intervention.technician_notes,
+        agency_comments=intervention.agency_comments,
+        technician_user_id=intervention.technician_user_id,
+        technician_name=intervention.technician.full_name if intervention.technician else None,
+        created_at=intervention.created_at,
+        updated_at=intervention.updated_at,
+        review_status=intervention.review_status,
+        review_feedback=intervention.review_feedback,
+        reviewed_by_user_id=intervention.reviewed_by_user_id,
+        reviewed_by_name=intervention.reviewed_by.full_name if intervention.reviewed_by else None,
+        reviewed_at=intervention.reviewed_at,
+        user_validated_at=intervention.user_validated_at,
     )
 
 

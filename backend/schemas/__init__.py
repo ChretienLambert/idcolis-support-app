@@ -211,16 +211,36 @@ class InterventionCreate(BaseModel):
     agency_comments: str | None = None
 
 
+class InterventionUpdate(BaseModel):
+    agency: str | None = None
+    site: str | None = None
+    city: str | None = None
+    started_at: datetime | None = None
+    contact_name: str | None = None
+    diagnosis: str | None = None
+    actions_performed: str | None = Field(default=None, min_length=3)
+    equipment_involved: str | None = None
+    materials_used: str | None = None
+    tests_performed: str | None = None
+    result: Literal["En cours", "Suspendu", "Résolu", "Brouillon", "Partiellement résolu", "Non résolu", "Escaladé"] | None = None
+    follow_up: str | None = None
+    resolution_notes: str | None = None
+    technician_notes: str | None = None
+    agency_comments: str | None = None
+
+
 class InterventionSchema(InterventionCreate):
     id: str
     ticket_id: str
     intervention_number: str
     technician_user_id: str | None = None
+    technician_name: str | None = None
     created_at: datetime
     updated_at: datetime
     review_status: str = "En attente de validation"
     review_feedback: str | None = None
     reviewed_by_user_id: str | None = None
+    reviewed_by_name: str | None = None
     reviewed_at: datetime | None = None
     user_validated_at: datetime | None = None
 

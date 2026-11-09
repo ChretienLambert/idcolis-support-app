@@ -176,6 +176,8 @@ class Intervention(Base):
 
     ticket: Mapped["Ticket"] = relationship(back_populates="interventions")
     attachments: Mapped[list["InterventionAttachment"]] = relationship(back_populates="intervention", cascade="all, delete-orphan")
+    technician: Mapped["User | None"] = relationship(foreign_keys=[technician_user_id])
+    reviewed_by: Mapped["User | None"] = relationship(foreign_keys=[reviewed_by_user_id])
 
 
 class InterventionAttachment(Base):
