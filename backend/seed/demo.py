@@ -955,6 +955,17 @@ def ensure_demo_data(db: Session) -> None:
     }
     routing_model = TicketRoutingModel()
 
+    # The seeded ticket descriptions name a city but never a specific station,
+    # so "Poste / agence locale" stayed blank. Map the city they mention to a
+    # real seeded station (see seed_directory above) the same way a real agent
+    # would pick it.
+    city_to_station = {
+        "yaoundé": "Yaoundé Centre",
+        "douala": "DLA-Bépanda",
+        "bafoussam": "Bafoussam Centre",
+    }
+    default_station = "DLA-Village"
+
     def create_initial_ticket(email: str, subject: str, description: str):
         stmt = select(User).where(User.email == email)
         user = db.execute(stmt).scalar_one_or_none()
@@ -980,6 +991,11 @@ def ensure_demo_data(db: Session) -> None:
         if not agent:
             agent = db.execute(select(Agent).where(Agent.team_id == team.id, Agent.is_active.is_(True))).scalars().first()
 
+        site = next(
+            (station for city, station in city_to_station.items() if city in description.lower()),
+            default_station,
+        )
+
         ticket = Ticket(
             id=tkt_id,
             requester_user_id=user.id,
@@ -989,6 +1005,7 @@ def ensure_demo_data(db: Session) -> None:
             category=prediction.category,
             priority=prediction.priority,
             status="En attente",
+            site=site,
             team_id=team.id,
             assigned_agent_id=agent.id if agent else None,
             created_at=utcnow(),
