@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
+
 APP_TITLE = "ID Colis Support App"
-BACKEND_URL = "http://127.0.0.1:8000"
+BACKEND_URL = os.getenv("IDCOLIS_BACKEND_URL", "http://127.0.0.1:8000")
 
 LOGISTICS_CATEGORIES = [
     "Fleet / Driver App",

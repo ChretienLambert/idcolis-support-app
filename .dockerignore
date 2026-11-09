@@ -1,0 +1,14 @@
+.git
+.idcolis-venv
+.venv
+.venv_fresh
+.pytest_cache
+__pycache__
+*.pyc
+tmp
+backend/*.db
+backend/demo_runtime.db
+backend/socadel_dev.db
+installer
+*.docx
+.env
