@@ -10,6 +10,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from constants import NAVY
+from i18n import t
 
 
 def inject_styles() -> None:
@@ -280,7 +281,7 @@ def status_badge(status: str) -> str:
         "Clôturé": "badge-closed",
     }
     css = mapping.get(status, "badge-wait")
-    return f'<span class="badge {css}">{status}</span>'
+    return f'<span class="badge {css}">{t(status)}</span>'
 
 
 def ticket_card(ticket: dict, key_prefix: str, meta: str, button_label: str = "Ouvrir →") -> bool:
@@ -295,7 +296,7 @@ def ticket_card(ticket: dict, key_prefix: str, meta: str, button_label: str = "O
                 unsafe_allow_html=True,
             )
         with right:
-            opened = st.button(button_label, key=f"{key_prefix}_{ticket['id']}", width="stretch")
+            opened = st.button(t(button_label), key=f"{key_prefix}_{ticket['id']}", width="stretch")
     return opened
 
 

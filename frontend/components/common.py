@@ -7,6 +7,7 @@ import base64
 
 import streamlit as st
 
+from i18n import lang_key, t
 from services.api import BackendAPI
 from services.logging import build_logger
 
@@ -92,11 +93,11 @@ def _ticket_created_date(ticket: Ticket) -> date | None:
 
 
 def _apply_time_filter(tickets: list[Ticket], prefix: str) -> list[Ticket]:
-    preset_key = f"{prefix}_time_preset"
+    preset_key = lang_key(f"{prefix}_time_preset")
     if preset_key not in st.session_state:
         st.session_state[preset_key] = "Tous"
 
-    preset = st.selectbox("Période", ["Tous", "Aujourd’hui", "7 derniers jours", "30 derniers jours"], key=preset_key, label_visibility="collapsed")
+    preset = st.selectbox(t("Période"), ["Tous", "Aujourd’hui", "7 derniers jours", "30 derniers jours"], key=preset_key, label_visibility="collapsed", format_func=t)
     if preset == "Tous":
         return tickets
 

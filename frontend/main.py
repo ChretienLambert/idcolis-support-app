@@ -16,6 +16,7 @@ from components.pages.login import render_login
 from components.pages.operation_report import render_operation_report
 from components.pages.ticket_detail import render_ticket_detail
 from components.pages.user_pages import render_ticket_create, render_user_home, render_user_tickets
+from i18n import language_switch, sync_lang_from_query
 from services.api import BackendAPI, APIError
 from services.session import clear_session, ensure_state, load_query_navigation, load_query_session, set_navigation, set_session
 from views.layout import inject_styles
@@ -53,7 +54,9 @@ def main() -> None:
     ensure_state()
     st.session_state.dark_mode = False
     st.set_page_config(page_title="ID Colis Support App", page_icon="ID", layout="wide", initial_sidebar_state="expanded")
+    sync_lang_from_query()
     inject_styles()
+    language_switch()
     _restore_from_query()
     _restore_navigation_from_query()
     if st.session_state.get("page") in {"ticket_detail", "operation_report"} and st.session_state.get("nav_ticket_id") and not st.session_state.get("selected_ticket_id"):

@@ -17,7 +17,7 @@ class SelfHelpAdvisor:
     def __init__(self) -> None:
         self.articles: list[tuple[list[str], SelfHelpArticle]] = [
             (
-                ["wifi", "wi-fi", "internet", "pas de connexion", "pas de reseau", "pas de réseau", "réseau coupé", "reseau coupe"],
+                ["wifi", "wi-fi", "internet", "pas de connexion", "pas de reseau", "pas de réseau", "réseau coupé", "reseau coupe", "no connection", "network down"],
                 SelfHelpArticle(
                     title="Pas de connexion Internet ou Wi-Fi",
                     steps=[
@@ -30,7 +30,7 @@ class SelfHelpAdvisor:
                 ),
             ),
             (
-                ["mise a jour", "mise à jour", "ne se met pas a jour", "ne se met pas à jour", "update", "application pas a jour"],
+                ["mise a jour", "mise à jour", "ne se met pas a jour", "ne se met pas à jour", "update", "application pas a jour", "not updating"],
                 SelfHelpArticle(
                     title="L'application ID Colis ne se met pas à jour",
                     steps=[
@@ -43,7 +43,7 @@ class SelfHelpAdvisor:
                 ),
             ),
             (
-                ["mot de passe oublie", "mot de passe oublié", "mot de passe perdu", "compte bloque", "compte bloqué"],
+                ["mot de passe oublie", "mot de passe oublié", "mot de passe perdu", "compte bloque", "compte bloqué", "forgot password", "forgot my password", "forgotten password", "account locked", "locked out"],
                 SelfHelpArticle(
                     title="Mot de passe oublié ou compte bloqué",
                     steps=[
@@ -55,7 +55,7 @@ class SelfHelpAdvisor:
                 ),
             ),
             (
-                ["imprimante", "impossible d'imprimer", "n'imprime pas", "imprimante hors ligne"],
+                ["imprimante", "impossible d'imprimer", "n'imprime pas", "imprimante hors ligne", "printer", "can't print", "cannot print"],
                 SelfHelpArticle(
                     title="L'imprimante ne répond pas",
                     steps=[
@@ -67,7 +67,7 @@ class SelfHelpAdvisor:
                 ),
             ),
             (
-                ["scanner", "lecteur code barre", "lecteur code-barre", "scan ne fonctionne pas"],
+                ["scanner", "lecteur code barre", "lecteur code-barre", "scan ne fonctionne pas", "barcode"],
                 SelfHelpArticle(
                     title="Le scanner ne lit pas les codes",
                     steps=[

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
+from i18n import t
 from services.api import APIError
 from services.session import set_navigation
 
@@ -20,9 +21,9 @@ def _fmt_date(value: str | None) -> str:
         return "—"
     try:
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        return parsed.strftime("%d/%m/%Y à %H:%M")
+        return parsed.strftime(t("%d/%m/%Y à %H:%M"))
     except ValueError:
-        return str(value)[:16].replace("T", " à ")
+        return str(value)[:16].replace("T", " ")
 
 
 def render_operation_report() -> None:
@@ -39,7 +40,7 @@ def render_operation_report() -> None:
         st.error(str(exc))
         return
 
-    if st.button("← Retour au ticket", width="stretch"):
+    if st.button(t("← Retour au ticket"), width="stretch"):
         set_navigation("ticket_detail", ticket_id)
         st.rerun()
 
@@ -51,10 +52,10 @@ def render_operation_report() -> None:
         and latest.get("user_validated_at")
     )
     if not fully_validated:
-        st.info(
+        st.info(t(
             "Le rapport d'opération n'est disponible qu'une fois le ticket entièrement validé : "
             "intervention du technicien, approbation du régulateur, puis confirmation du demandeur."
-        )
+        ))
         return
 
     # Scoped to this page: makes the document legible with the browser's own
@@ -94,28 +95,38 @@ def render_operation_report() -> None:
         unsafe_allow_html=True,
     )
 
-    generated_at = datetime.now(timezone.utc).strftime("%d/%m/%Y à %H:%M UTC")
+    generated_at = datetime.now(timezone.utc).strftime(t("%d/%m/%Y à %H:%M")) + " UTC"
+
+    def field(label: str, value: str) -> str:
+        return f'<div><div class="report-field-label">{t(label)}</div><div class="report-field-value">{value}</div></div>'
+
+    summary_fields = "".join([
+        field("Sujet", _fmt(ticket.get("subject"))),
+        field("Catégorie", _fmt(t(ticket.get("category")))),
+        field("Agence", _fmt(ticket.get("agency"))),
+        field("Poste / agence locale", _fmt(ticket.get("site"))),
+        field("Priorité", _fmt(t(ticket.get("priority")))),
+        field("Équipe assignée", _fmt(t(ticket.get("team_name")))),
+        field("Ouvert le", _fmt_date(ticket.get("created_at"))),
+        field("Résolu le", _fmt_date(ticket.get("resolved_at"))),
+    ])
+    report_title = t("Rapport d'opération — ID Colis Support")
+    report_sub = t("Ticket {id} · Généré le {date}", id=_fmt(ticket["id"]), date=generated_at)
+    summary_title = t("Résumé du ticket")
+    description_title = t("Description de l'incident")
+    description = _fmt(ticket.get("description"))
 
     st.markdown(
         f"""
         <div class="report-sheet">
-          <div class="report-title">Rapport d'opération — ID Colis Support</div>
-          <div class="report-sub">Ticket {_fmt(ticket['id'])} · Généré le {generated_at}</div>
+          <div class="report-title">{report_title}</div>
+          <div class="report-sub">{report_sub}</div>
 
-          <div class="report-section-title">Résumé du ticket</div>
-          <div class="report-grid">
-            <div><div class="report-field-label">Sujet</div><div class="report-field-value">{_fmt(ticket.get('subject'))}</div></div>
-            <div><div class="report-field-label">Catégorie</div><div class="report-field-value">{_fmt(ticket.get('category'))}</div></div>
-            <div><div class="report-field-label">Agence</div><div class="report-field-value">{_fmt(ticket.get('agency'))}</div></div>
-            <div><div class="report-field-label">Poste / agence locale</div><div class="report-field-value">{_fmt(ticket.get('site'))}</div></div>
-            <div><div class="report-field-label">Priorité</div><div class="report-field-value">{_fmt(ticket.get('priority'))}</div></div>
-            <div><div class="report-field-label">Équipe assignée</div><div class="report-field-value">{_fmt(ticket.get('team_name'))}</div></div>
-            <div><div class="report-field-label">Ouvert le</div><div class="report-field-value">{_fmt_date(ticket.get('created_at'))}</div></div>
-            <div><div class="report-field-label">Résolu le</div><div class="report-field-value">{_fmt_date(ticket.get('resolved_at'))}</div></div>
-          </div>
+          <div class="report-section-title">{summary_title}</div>
+          <div class="report-grid">{summary_fields}</div>
 
-          <div class="report-section-title">Description de l'incident</div>
-          <div class="report-prose">{_fmt(ticket.get('description'))}</div>
+          <div class="report-section-title">{description_title}</div>
+          <div class="report-prose">{description}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -127,49 +138,51 @@ def render_operation_report() -> None:
         ("Équipement concerné", latest.get("equipment_involved")),
         ("Pièces / temps passé", latest.get("materials_used")),
         ("Tests effectués", latest.get("tests_performed")),
-        ("Résultat", latest.get("result")),
+        ("Résultat", t(latest.get("result"))),
         ("Notes de résolution", latest.get("resolution_notes")),
     )
     detail_rows = "".join(
-        f'<div><div class="report-field-label">{label}</div><div class="report-prose">{_fmt(value)}</div></div>'
+        f'<div><div class="report-field-label">{t(label)}</div><div class="report-prose">{_fmt(value)}</div></div>'
         for label, value in details
         if value
     )
+    detail_title = t("Détail de l'intervention — {number}", number=_fmt(latest.get("intervention_number")))
     st.markdown(
         f"""
         <div class="report-sheet">
-          <div class="report-title" style="font-size:1.2rem;">Détail de l'intervention — {_fmt(latest.get('intervention_number'))}</div>
+          <div class="report-title" style="font-size:1.2rem;">{detail_title}</div>
           <div class="report-grid" style="margin-top:.75rem;">{detail_rows}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    signature_label = t("Signature")
+
+    def signoff(role: str, name: str | None, date_label: str, date_value: str | None) -> str:
+        role_label = t(role)
+        date_text = t(date_label, date=_fmt_date(date_value))
+        return f"""
+            <div class="signoff-card">
+              <div class="signoff-role">{role_label}</div>
+              <div class="signoff-name">{_fmt(name)}</div>
+              <div class="signoff-date">{date_text}</div>
+              <div class="signoff-line">{signature_label}</div>
+            </div>"""
+
+    signoff_cards = "".join([
+        signoff("Technicien (exécution)", latest.get("technician_name"), "Intervention du {date}", latest.get("started_at") or latest.get("created_at")),
+        signoff("Régulateur (approbation)", latest.get("reviewed_by_name"), "Approuvé le {date}", latest.get("reviewed_at")),
+        signoff("Demandeur (confirmation)", ticket.get("requester_name"), "Confirmé le {date}", latest.get("user_validated_at")),
+    ])
+    signoff_title = t("Validation à trois parties")
+    signoff_sub = t("Cette opération a été réalisée, contrôlée et confirmée par les personnes suivantes.")
     st.markdown(
         f"""
         <div class="report-sheet">
-          <div class="report-title" style="font-size:1.2rem;">Validation à trois parties</div>
-          <div class="report-sub">Cette opération a été réalisée, contrôlée et confirmée par les personnes suivantes.</div>
-          <div class="signoff-grid">
-            <div class="signoff-card">
-              <div class="signoff-role">Technicien (exécution)</div>
-              <div class="signoff-name">{_fmt(latest.get('technician_name'))}</div>
-              <div class="signoff-date">Intervention du {_fmt_date(latest.get('started_at') or latest.get('created_at'))}</div>
-              <div class="signoff-line">Signature</div>
-            </div>
-            <div class="signoff-card">
-              <div class="signoff-role">Régulateur (approbation)</div>
-              <div class="signoff-name">{_fmt(latest.get('reviewed_by_name'))}</div>
-              <div class="signoff-date">Approuvé le {_fmt_date(latest.get('reviewed_at'))}</div>
-              <div class="signoff-line">Signature</div>
-            </div>
-            <div class="signoff-card">
-              <div class="signoff-role">Demandeur (confirmation)</div>
-              <div class="signoff-name">{_fmt(ticket.get('requester_name'))}</div>
-              <div class="signoff-date">Confirmé le {_fmt_date(latest.get('user_validated_at'))}</div>
-              <div class="signoff-line">Signature</div>
-            </div>
-          </div>
+          <div class="report-title" style="font-size:1.2rem;">{signoff_title}</div>
+          <div class="report-sub">{signoff_sub}</div>
+          <div class="signoff-grid">{signoff_cards}</div>
         </div>
         """,
         unsafe_allow_html=True,

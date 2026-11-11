@@ -11,6 +11,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from constants import AGENT_PAGES, NAVY, REGULATOR_PAGES, USER_PAGES
+from i18n import t
 from services.session import set_navigation
 
 LOGO_DIR = Path(__file__).resolve().parents[1] / "assets" / "logos"
@@ -30,13 +31,14 @@ def render_sidebar(role: str | None) -> None:
         "Régulateur_Agence": "Régulateur agence",
         "Utilisateur": "Utilisateur final"
     }
-    display_role = role_display_map.get(role, role) if role else ""
+    display_role = t(role_display_map.get(role, role)) if role else ""
+    tagline = t("Support terrain et logistique")
 
     st.sidebar.markdown(
         f"""
         <div style="padding:1rem 0 0.8rem 0;">
           <div style="font-weight:900;font-size:1.1rem;color:var(--idc-navy);">ID Colis</div>
-          <div style="color:var(--idc-muted);font-size:.92rem;margin-top:.15rem;">Support terrain et logistique</div>
+          <div style="color:var(--idc-muted);font-size:.92rem;margin-top:.15rem;">{tagline}</div>
           <div style="margin-top:.8rem;padding:.75rem .9rem;border-radius:16px;background:var(--idc-card);border:1px solid var(--idc-border);">
             <div style="font-weight:800;color:var(--idc-navy);">{user.get("full_name","")}</div>
             <div style="color:var(--idc-muted);font-size:.9rem;">{display_role}</div>
@@ -67,15 +69,15 @@ def render_sidebar(role: str | None) -> None:
     current = st.session_state.get("page", "login")
     for label, key in pages:
         if role == "Support_IT" and key == "interventions":
-            st.sidebar.markdown("<div class='idc-eyebrow' style='margin:.8rem 0 .45rem;'>Opérations</div>", unsafe_allow_html=True)
+            st.sidebar.markdown(f"<div class='idc-eyebrow' style='margin:.8rem 0 .45rem;'>{t('Opérations')}</div>", unsafe_allow_html=True)
         if role == "Support_IT" and key == "diagnostics":
-            st.sidebar.markdown("<div class='idc-eyebrow' style='margin:.8rem 0 .45rem;'>Administration</div>", unsafe_allow_html=True)
-        pressed = st.sidebar.button(label, key=f"nav_{key}", width="stretch", type="primary" if current == key else "secondary")
+            st.sidebar.markdown(f"<div class='idc-eyebrow' style='margin:.8rem 0 .45rem;'>{t('Administration')}</div>", unsafe_allow_html=True)
+        pressed = st.sidebar.button(t(label), key=f"nav_{key}", width="stretch", type="primary" if current == key else "secondary")
         if pressed:
             set_navigation(key)
             st.rerun()
     st.sidebar.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
-    if st.sidebar.button("Déconnexion", key="logout_btn", width="stretch"):
+    if st.sidebar.button(t("Déconnexion"), key="logout_btn", width="stretch"):
         st.session_state.logout_requested = True
         st.rerun()
 

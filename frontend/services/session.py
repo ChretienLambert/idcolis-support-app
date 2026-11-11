@@ -47,6 +47,8 @@ def clear_session() -> None:
     st.session_state.selected_ticket_id = None
     try:
         st.query_params.clear()
+        if st.session_state.get("lang") == "en":
+            st.query_params["lang"] = "en"
     except Exception:
         pass
 
