@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from ..auth.deps import get_current_user, require_role
-from ..db.session import get_db
 from ..dependencies import classifier, get_ticket_service, self_help_advisor
-from ..models import Agent, Team, User
+from ..models import User
 from ..schemas import (
     AIPerformanceSchema,
     AITrainResponse,
@@ -34,21 +31,22 @@ _SERVICE_MAPPING = {
 
 
 @router.post("/classify", response_model=ClassificationResultSchema)
-def classify(payload: ClassificationRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def classify(payload: ClassificationRequest, ticket_service: TicketService = Depends(get_ticket_service), user: User = Depends(get_current_user)):
     prediction = classifier.predict(payload.subject, payload.description, payload.agency)
-    team = db.execute(select(Team).where(Team.slug == prediction.team_slug)).scalar_one()
-    agent = db.execute(select(Agent).where(Agent.team_id == team.id, Agent.is_primary.is_(True))).scalar_one_or_none()
+    # The low-confidence fallback returns "helpdesk-core", which is an alias, not a real team slug.
+    team = ticket_service._team_by_slug(prediction.team_slug)
+    agent = ticket_service._primary_agent_for_team(team.id)
 
     user_region = user.region or "Inconnue"
     service_concerne = _SERVICE_MAPPING.get(prediction.category, "Support logistique à qualifier")
-    equipe_cible = prediction.team_slug.replace("-", " ").title()
+    equipe_cible = team.slug.replace("-", " ").title()
 
     return ClassificationResultSchema(
         category=prediction.category,
         priority=prediction.priority,
         team_id=team.id,
         team_name=team.name,
-        team_slug=prediction.team_slug,
+        team_slug=team.slug,
         agent_id=agent.id if agent else None,
         agent_name=agent.user.full_name if agent and agent.user else None,
         confidence=prediction.confidence,
